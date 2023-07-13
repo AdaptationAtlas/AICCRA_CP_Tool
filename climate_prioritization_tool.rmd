@@ -16,9 +16,7 @@ margin-right: auto;
 
 
 ```{r setup, include=FALSE}
-# ***!!!IMPORTANT!!!*** YOU NEED TO CHANGE THE LINE BELOW TO BE THE PATH WHERE YOU HAVE SAVED THIS PROJECT TO (USE "/" NOT "\")
-knitr::opts_knit$set(root.dir = "D:/eia_TZ_climate_tool")
-# knitr::opts_knit$set(root.dir = "INSERT FULL FILE PATH HERE")
+#knitr::opts_knit$set(root.dir = "D:/eia_TZ_climate_tool")
 knitr::opts_chunk$set(echo = TRUE)
 options(scipen = 999)
 ```
