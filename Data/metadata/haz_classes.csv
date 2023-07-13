@@ -1,0 +1,49 @@
+index_name,lower_lim,upper_lim,class,description,direction
+HSH_max,#NAME?,27,1,No significant stress,>
+HSH_max,27,32,2,Moderate,>
+HSH_max,32,41,3,Severe,>
+HSH_max,41,Inf,4,Extreme,>
+HSH_mean,#NAME?,27,1,No significant stress,>
+HSH_mean,27,32,2,Moderate,>
+HSH_mean,32,41,3,Severe,>
+HSH_mean,41,Inf,4,Extreme,>
+HSM_NTx35,#NAME?,7,1,No significant stress,>
+HSM_NTx35,7,14,2,Moderate,>
+HSM_NTx35,14,21,3,Severe,>
+HSM_NTx35,21,Inf,4,Extreme,>
+NDD,#NAME?,15,1,No significant stress,>
+NDD,15,20,2,Moderate,>
+NDD,20,25,3,Severe,>
+NDD,25,Inf,4,Extreme,>
+NDWL0,#NAME?,2,1,No significant stress,>
+NDWL0,2,5,2,Moderate,>
+NDWL0,5,8,3,Severe,>
+NDWL0,8,Inf,4,Extreme,>
+NDWS,0,15,1,No significant stress,>
+NDWS,15,20,2,Moderate,>
+NDWS,20,25,3,Severe,>
+NDWS,25,Inf,4,Extreme,>
+NTx40,#NAME?,1,1,No significant stress,>
+NTx40,1,5,2,Moderate,>
+NTx40,5,10,3,Severe,>
+NTx40,10,Inf,4,Extreme,>
+PTOT,500,1200,1,No significant stress,<
+PTOT,400,500,2,Moderate,<
+PTOT,300,400,3,Severe,<
+PTOT,#NAME?,300,4,Extreme,<
+TAI,#NAME?,40,1,No significant stress,>
+TAI,40,60,2,Moderate,>
+TAI,60,80,3,Severe,>
+TAI,80,Inf,4,Extreme,>
+TAVG,#NAME?,33,1,No significant stress,>
+TAVG,33,36,2,Moderate,>
+TAVG,36,47,3,Severe,>
+TAVG,47,Inf,4,Extreme,>
+THI_max,#NAME?,72,1,No significant stress,>
+THI_max,72,78,2,Moderate,>
+THI_max,78,89,3,Severe,>
+THI_max,89,Inf,4,Extreme,>
+THI_mean,#NAME?,72,1,No significant stress,>
+THI_mean,72,78,2,Moderate,>
+THI_mean,78,89,3,Severe,>
+THI_mean,89,Inf,4,Extreme,>

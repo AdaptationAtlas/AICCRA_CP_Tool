@@ -1,0 +1,16 @@
+﻿Code,System_Short,R,G,B,System,Irrigation,Aridity,System_Full
+1,LGY,255,255,255,Rangelands,NA,Hyperarid,Rangelands Hyperarid
+2,LGA,255,250,190,Rangelands,NA,Arid,Rangelands Arid
+3,LGH,255,211,127,Rangelands,NA,Humid,Rangelands Humid
+4,LGT,205,170,102,Rangelands,NA,Temperate,Rangelands Temperate
+5,MRY,224,242,201,Mixed,Rainfed,Hyperarid,Mixed Rainfed Hyperarid
+6,MRA,199,255,184,Mixed,Rainfed,Arid,Mixed Rainfed Arid
+7,MRH,112,168,0,Mixed,Rainfed,Humid,Mixed Rainfed Humid
+8,MRT,38,115,0,Mixed,Rainfed,Temperate,Mixed Rainfed Temperate
+9,MIY,245,227,237,Mixed,Irrigated,Hyperarid,Mixed Irrigated Hyperarid
+10,MIA,232,190,255,Mixed,Irrigated,Arid,Mixed Irrigated Arid
+11,MIH,190,86,190,Mixed,Irrigated,Humid,Mixed Irrigated Humid
+12,MIT,115,0,76,Mixed,Irrigated,Temperate,Mixed Irrigated Temperate
+13,Urban,52,52,52,Urban,NA,NA,Urban
+14,Other,225,225,225,Other,NA,NA,Other
+15,Unsuitable,190,210,255,Unsuitable,NA,NA,Unsuitable
