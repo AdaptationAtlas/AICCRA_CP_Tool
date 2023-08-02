@@ -89,11 +89,121 @@ exposure_layers[,product:=unlist(tstrsplit(names(SPAM_GLW),"-",keep=1))
 exposure_layers[,category:="crop"][product %in% c("goats","sheep","pigs","cattle","chickens","horses","livestock","buffalo"),category:="livestock"]
 
 
+GLPS_Legend<-data.table::fread("Data/metadata/LPS_legend_RGB.csv")
+
+GLPS<-terra::rast("./Data/GLPS/glps_gleam_61113_10km.tif")
+levels(GLPS)<-data.frame(value=0:14,LPS=GLPS_Legend[1:15,System_Full])
+GLPS<-terra::mask(terra::crop(terra::resample(GLPS,Exposure,method="near"),Geographies$admin0),Geographies$admin0)
+
+
+  Regions<-SubGeog
+  Regions$Code<-1:length(Regions)*100
+  REG<-terra::rasterize(Regions,GLPS,field="Code")
+  HAZ<-GLPS+REG
+  names(HAZ)<-"GLPS"
+  
+  Area<-cellSize(GLPS,unit="ha")
+  
+  GLPS_vals<-data.frame(Code=GLPS_Legend[,as.numeric(Code)]-1,
+                        LPS=GLPS_Legend[,System_Full],
+                        Short=GLPS_Legend[,System_Short])
+  
+  X<-data.table(zonal(Area,HAZ,fun=sum,na.rm=T))
+  X[,admin:=floor(GLPS/100)*100]
+  X[,GLPS:=GLPS-admin]
+  X[,admin:=terra::values(Regions)[match(X$admin,Regions$Code),"admin_name"]]
+  X[,GLPS_short:=GLPS_vals[match(X$GLPS,GLPS_vals$Code),"Short"]]
+  X[,GLPS:=GLPS_vals[match(X$GLPS,GLPS_vals$Code),"LPS"]]
+  
+  admin_sizes<-data.table(admin=Regions$admin_name,admin_unit_ha=round(expanse(Regions,unit="ha"),2))
+  X<-merge(X,admin_sizes)
+  X[,perc:=round(100*area/admin_unit_ha,2)][,area:=round(area,2)]
+  
+  GLPS_table<-X
+  
+  
+# get cattle production in GLPS
+cattle<-Exposure$`cattle-production-k`
+
+X<-data.table(zonal(cattle,HAZ,fun=sum,na.rm=T))
+X[,admin:=floor(GLPS/100)*100]
+X[,GLPS:=GLPS-admin]
+X[,admin:=terra::values(Regions)[match(X$admin,Regions$Code),"admin_name"]]
+X[,GLPS_short:=GLPS_vals[match(X$GLPS,GLPS_vals$Code),"Short"]]
+X[,GLPS:=GLPS_vals[match(X$GLPS,GLPS_vals$Code),"LPS"]]
+names(X)[2]<-"cattle_prod"
+
+gpls_cattle<-data.table(zonal(cattle,GLPS,fun=sum,na.rm=T))
+colnames(gpls_cattle)<-c("GLPS","cattle_prod_tot")
+X<-merge(X,gpls_cattle)
+X[,cattle_glps_prop:=round(cattle_prod/cattle_prod_tot,3)]
+
+cattle_admin_lps<-X
+
+GLPS_table<-merge(GLPS_table,cattle_admin_lps[,list(admin,GLPS_short,cattle_glps_prop)],all.x=T,by=c("admin","GLPS_short"))
+  
+dmi_econ_loss<-fread("./Data/thornton_lancet/dmi_and_econ_loss.csv")
+dmi_econ_loss<-dmi_econ_loss[ISO == country_zips[Country==country_choice,iso3c[1]]][,ISO:=NULL][,Region:=NULL][,`WTD-AV`:=NULL]
+dmi_econ_loss<-melt(dmi_econ_loss,id.vars = c("Country","Variable","Scenario"),variable.name = "GLPS_short")
+dmi_econ_loss[,value:=gsub(",","",value)][,value:=as.numeric(value)]
+dmi_econ_loss<-dcast(dmi_econ_loss,Country+Scenario+GLPS_short~Variable)
+dmi_econ_loss[,GLPS_short:=gsub("URB","Urban",GLPS_short)]
+
+GLPS_table<-merge(GLPS_table,by="GLPS_short",dmi_econ_loss[Scenario=="historical",list(GLPS_short,dmi)],all.x=T)
+setnames(GLPS_table,"dmi","dmi_hist")
+GLPS_table<-merge(GLPS_table,by="GLPS_short",dmi_econ_loss[Scenario=="2045_SSP585",list(GLPS_short,dmi)],all.x=T)
+setnames(GLPS_table,"dmi","dmi_2045_SSP585")
+
+GLPS_table<-merge(GLPS_table,by="GLPS_short",dmi_econ_loss[Scenario=="2045_SSP585",list(GLPS_short,meat_loss,milk_loss)],all.x=T)
+setnames(GLPS_table,c("meat_loss","milk_loss"),c("meat_loss_2045_SSP585","milk_loss_2045_SSP585"))
+GLPS_table[,meat_loss_2045_SSP585:=cattle_glps_prop*as.numeric(meat_loss_2045_SSP585)
+           ][,milk_loss_2045_SSP585:=cattle_glps_prop*as.numeric(meat_loss_2045_SSP585)]
+
+require(wbstats)
+
+# Download exchange rates
+
+# Download the CPI data
+cpi_file<-paste0(SaveDir,"/CPI.csv")
+if(!file.exists(cpi_file)){
+  cpi_data <- data.table(wbstats::wb_data("FP.CPI.TOTL", country_zips[Country==country_choice,iso3c][1]))
+  fwrite(cpi_data,file=cpi_file)
+}else{
+  cpi_data<-fread(cpi_file)
+}
+
+xrat_file<-paste0(SaveDir,"/Xrat.csv")
+if(!file.exists(xrat_file)){
+  exchange_rates <- data.table(wbstats::wb_data("PA.NUS.FCRF",country_zips[Country==country_choice,iso3c][1]))
+  fwrite(exchange_rates,file=xrat_file)
+}else{
+  exchange_rates<-fread(xrat_file)
+}
+
+adj_usd<-function(value,xrat_past,xrat_fut,index_past,index_fut){
+  X<-value*xrat_past
+  X<-X/index_past
+  X<-X*index_fut
+  X<-X/xrat_fut
+  return(X)
+}
+
+GLPS_table[,meat_loss_2045_SSP585_adj:=adj_usd(value=meat_loss_2045_SSP585,
+                                               xrat_past=exchange_rates[date==2005,PA.NUS.FCRF][1],
+                                               xrat_fut=exchange_rates[date==2021,PA.NUS.FCRF][1],
+                                               index_past=cpi_data[date==2005,FP.CPI.TOTL][1],
+                                               index_fut=cpi_data[date==2021,FP.CPI.TOTL][1])]
+GLPS_table[,milk_loss_2045_SSP585_adj:=adj_usd(value=milk_loss_2045_SSP585,
+                                     xrat_past=exchange_rates[date==2005,PA.NUS.FCRF][1],
+                                     xrat_fut=exchange_rates[date==2021,PA.NUS.FCRF][1],
+                                     index_past=cpi_data[date==2005,FP.CPI.TOTL][1],
+                                     index_fut=cpi_data[date==2021,FP.CPI.TOTL][1])]
+
 haz_names<-hazards[hazards != "NDD"]
 Analysis_Vars<-haz_names[c(1,4,6)]
 Plot_Vars<-Analysis_Vars
 
-AdminLevel<-"Admin2"
+AdminLevel<-"Admin1"
 Admin1<-Geographies$admin1$admin_name
 Admin2<-Geographies$admin2$admin_name
 

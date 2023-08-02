@@ -37,6 +37,7 @@ required.packages <- c("countrycode",
                        "stringr",
                        "terra",
                        "viridis",
+                       "wbstats",
                        "wesanderson"
                        )
 
@@ -152,7 +153,7 @@ Viridis<-data.table(Source="viridis",Palette=c("magma","inferno","plasma","virid
 Met<-data.table(Source="MetBrewer",Palette=names(MetBrewer::MetPalettes))
 Wes<-data.table(Source="wesanderson",Palette=names(wesanderson::wes_palettes))
 
-Palettes<-rbind(Viridis,Met)
+Palettes<-rbind(Viridis,Met,Wes)
 
   selectInput(inputId="Palette", 
               label="Palette",
@@ -164,7 +165,8 @@ Palettes<-rbind(Viridis,Met)
 PalFun<-function(PalName,N,Names) {
 Viridis<-data.table(Source="viridis",Palette=c("magma","inferno","plasma","viridis","cividis","rocket","mako","turbo"))
 Met<-data.table(Source="MetBrewer",Palette=names(MetBrewer::MetPalettes))
-Palettes<-rbind(Viridis,Met)
+Wes<-data.table(Source="Wes",Palette=names(wesanderson::wes_palettes))
+Palettes<-rbind(Viridis,Met,Wes)
     
  if(Palettes[Palette==PalName,Source]=="viridis"){
     PAL<-viridis::viridis(N,option=PalName)
@@ -175,7 +177,12 @@ if(Palettes[Palette==PalName,Source]=="MetBrewer"){
 }
 
   if(Palettes[Palette==PalName,Source]=="Wes"){
-     PAL<-wesanderson::wes_palette(name=PalName, n=N, type="continuous")
+    if(N>length(wes_palettes[[PalName]])){
+     PAL<-wesanderson::wes_palette(name=PalName, n=length(wes_palettes[[PalName]]), type="continuous")
+     PAL<-colorRampPalette(PAL)(N)
+    }else{
+      PAL<-wesanderson::wes_palette(name=PalName, n=N, type="continuous")
+    }
   }
 names(PAL)<-Names
 
@@ -280,23 +287,27 @@ numericInput(inputId="Plot.Width",
  })
 ```
 ### User Notes
- <font size="6">
- This is an analytically heavy script and a prototype.  
- Be patient!  
- The first time you access the Results section for a country it will take many minutes to process the data (the same goes for changing calculation of climate variables from seasonal to annual). Check the Render tab in RStudio to see progress on tasks running.  
- Please go through the tabs in order as there are dependencies between tabs. Let each tab complete before moving to the next.  
- When changing country, seasonal or annual timeframe or admin unit from admin1 to admin2, return to the Admin and Exposure Datasets tab and wait for it to update before moving through the tabs.  
- If a tab is not updating when you have changed a selection, be patient, do not change any more selections (this will just make things worse.  
- If it gets stuck restart the rmarkdown.
+ <font size="5">
+ * This is an analytically heavy script and a prototype.  
+ * Be patient!  
+ * The first time you access the Results section for a country it will take many minutes to process the data (the same goes for changing calculation of climate variables from seasonal to annual). Check the Render tab in RStudio to see progress on tasks running.  
+ * Please go through the tabs in order as there are dependencies between tabs. Let each tab complete before moving to the next.  
+ When changing country, seasonal or annual timeframe or admin unit from admin1 to admin2, return to the Admin and Exposure Datasets tabs and wait for it to update before moving through the tabs.  
+ * If a tab is not updating when you have changed a selection, be patient, do not change any more selections (this will just make things worse.  
+ * If it gets stuck restart the rmarkdown.
 </font> 
   
-<font size="6.5">
+<font size="5">
 **Please see the `Create Hazards` tab, the thresholds selected are created from literature review and expert opinion, but it is your responsibility to review these and modify as required.**
 </font> 
 
 <font size="4">
-You will need to download country dataset zip files into the Data/country_data_zips folder of this R project. The country zips are currently housed in CGlabs `common_data/atlas_hazards/cimp6/indices/hazard_by_gadm0` folder:
-https://eia.scio.services:18002/hub/user-redirect/lab/tree/common_data/atlas_hazards/cmip6/indices/hazard_by_gadm0
+You will need to download country dataset zip files into the Data/country_data_zips folder of this R project.  
+The country zips are currently housed in CGlabs the `common_data/atlas_hazards/cimp6/indices/hazard_by_gadm0` folder in the `by_year` and `by_season` subfolders :
+https://eia.scio.services:18002/hub/user-redirect/lab/tree/common_data/atlas_hazards/cmip6/indices/hazard_by_gadm0  
+
+`by_year` = hazard are calculated annually (example `KEN-annual.zip`)  
+`by_season` = hazard are calculated for the maize growing season according to the Jagermier crop calendar (example `KEN-seasonal.zip`)
 </font> 
 
 ### Admin and Exposure Datasets
@@ -383,7 +394,12 @@ renderPlot({terra::plot(SPAM())},height=Plot.Height, width=Plot.Width)
 
 ```
 
-Plot GLW data:
+[Livestock population data](https://dataverse.harvard.edu/dataverse/glw_3) by [Gilbert et al., 2018](https://www.nature.com/articles/sdata2018227)
+
+We are using interpolated rasters indicated by `_Da` in the filename.
+
+We convert number of livestock into total livestock units (TLU) as per [Rothman-Ostrow et al. 2020](https://www.frontiersin.org/articles/10.3389/fvets.2020.556788/full): `TLU<-Cattle*0.7 + Buffalo*0.7 + Sheep*0.1 + Goat*0.1 + 0.01*Chicken + 0.2*Pig + 0.8*Horse`
+
 ```{r Dataset - GLW,echo=F}
 GLW_meta<-fread("./Data/metadata/livestock_GLW3_metadata.csv")
 
@@ -394,18 +410,14 @@ GLW<-reactive({
 renderPlot({terra::plot(GLW())},height=Plot.Height, width=Plot.Width)
 ```
 
-Plot Global Distribution of LPS (Robinson et al. 2014):
+[GLPC Livestock Production Systems (LPS) map](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/WPDSZE) by [Robinson et al. 2014](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0096084):
 ```{r Dataset _ GLPS,echo=T}
 GLPS_Legend<-data.table::fread("Data/metadata/LPS_legend_RGB.csv")
 
 GLPS<-reactive({
   GLPS<-terra::rast("./Data/GLPS/glps_gleam_61113_10km.tif")
+  levels(GLPS)<-data.frame(value=1:15,LPS=GLPS_Legend[1:15,System_Full])
   GLPS<-terra::mask(terra::crop(terra::resample(GLPS,Exposure(),method="near"),Geographies()$admin0),Geographies()$admin0)
-  
-  GLPS[which(GLPS[] %in% c(13,14,15))]<-NA
-  GLPS<-GLPS-1
-  
-  levels(GLPS)<-data.frame(value=0:11,LPS=GLPS_Legend[1:12,System_Full])
   GLPS
 })
 
@@ -500,8 +512,8 @@ if(F){
 **Define hazard thresholds**  
 See https://github.com/AdaptationAtlas/hazards for how hazards layers were created.
 
-**HSH_max** = `r haz_meta[grepl("HSH_max",file.filename),dataset.desc]`  
-**HSH_mean** = `r haz_meta[grepl("HSH_mean",file.filename),dataset.desc]`  
+**HSH_max** = `r haz_meta[grepl("HSH_max",file.filename),dataset.desc]`   
+**HSH_mean** = `r haz_meta[grepl("HSH_mean",file.filename),dataset.desc]`   
 **HSM_NTx35** = `r haz_meta[grepl("HSM_NTx35",file.filename),dataset.desc]`  
 **NDD** = `r haz_meta[grepl("NDD",file.filename),dataset.desc]`  
 **NDWL0** = `r haz_meta[grepl("NDWL0",file.filename),dataset.desc]`  
@@ -509,11 +521,10 @@ See https://github.com/AdaptationAtlas/hazards for how hazards layers were creat
 **NTx40** = `r haz_meta[grepl("NTx40",file.filename),dataset.desc]`  
 **PTOT** = `r haz_meta[grepl("PTOT",file.filename),dataset.desc]`  
 **TAI** = `r haz_meta[grepl("TAI",file.filename),dataset.desc]`  
-**TAVG** = `r haz_meta[grepl("TAVG",file.filename),dataset.desc]` 
+**TAVG** = `r haz_meta[grepl("TAVG",file.filename),dataset.desc]`  
 **THI_max** = `r haz_meta[grepl("THI_max",file.filename),dataset.desc]`  
 **THI_mean** = `r haz_meta[grepl("THI_mean",file.filename),dataset.desc]`
 
-  
 Use the table below set hazard thresholds and the direction of classification (`<` lower or '>' higher than the threshold), and the bottom row to rename the hazard. Note renaming hazards requires recalculation of combined hazards and therefore takes time. When renaming variables **DO NOT** use underscores `_` or the reserved words `mean`,`meanclass`,`prop`,`propclass`,`exceedmean`, `exceedmax`.  
 
 :::: {style="display: flex;"}
@@ -1045,7 +1056,7 @@ textInput(inputId="H12_Name",
 ::::
 
 Create table of thresholds and filenames:
-```{r Analysis - Create thresholds table and filenames}
+```{r Analysis - Create thresholds table and filenames, echo=F}
 haz_names<-reactive({
   c(input$H1_Name,input$H2_Name,input$H3_Name,input$H4_Name,input$H5_Name,input$H6_Name,input$H7_Name,input$H8_Name,input$H9_Name,input$H10_Name,input$H11_Name,input$H12_Name)
   })
@@ -1460,7 +1471,7 @@ Here you can select which products, hazards and geographies to display. If you c
 product_choices<-reactive({
   if(input$product_choice1=="All"){X<-exposure_layers()[,sort(unique(product))]}
   if(input$product_choice1=="Livestock"){X<-exposure_layers()[category=="livestock",sort(unique(product))]}
-  if(input$product_choice1=="Crops"){X<-exposure_layers()[category=="crops",sort(unique(product))]}
+  if(input$product_choice1=="Crops"){X<-exposure_layers()[category=="crop",sort(unique(product))]}
   if(input$product_choice1=="None"){X<-NULL}
   X
 })
@@ -1515,7 +1526,7 @@ renderUI({
   selectInput(inputId="AdminLevel", 
               label="Admin level",
               choices = c("Admin1","Admin2"),
-              selected = "Admin2",
+              selected = "Admin1",
               multiple = F, 
               width="140px")
 ```
@@ -1756,32 +1767,162 @@ The table below sums crop and livestock exposure variables for the selected admi
   })
 ```
 
-##### GLPS
+##### GLPS{.tabset .tabset-fade .tabset-pills}
+Livestock intake and production loss data comes from [Thornton P, Nelson G, Mayberry D, Herrero M. Impacts of heat stress on global cattle production during the 21st century: a modelling study. The Lancet Planetary Health. 2022;6(3):e192-e201.](https://doi.org/10.1016/S2542-5196(22)00002-X).  
+
+Losses are assigned to admin units according to the share of cattle within lps categories as compared to total cattle numbers for the lps category (if loss was 1000 for humid rangelands (LGH) and an admin unit contains 65% of cattle within humid rangelands then the admin unit share of loss for  LGH is 1000*0.65 = 650).  
+
+Losses in meat and milk production (`meat_loss` and `milk_loss` cols) are the value of production lost compared with 2005 (USD 1000s, 2005 constant dollars). These values are adjusted to 2021 numbers using worldbank exchange rate (`PA.NUS.FCRF`) and CPI (`FP.CPI.TOTL.ZG`) indicators accessed with the `wbstats::wb_data` function.  
+The `dmi` cols are the dry matter intake adjustment factor (which is estimated nationally for different lps).
 ```{r Analyse - GLPS,echo=F}
-GLPS_table<-reactive({
-  Regions<-SubGeog()
+GLPS_table1<-reactive({
+    if(input$AdminLevel=="Admin2"){
+      Regions<-Geographies()$admin2
+    }else{
+      Regions<-Geographies()$admin1
+    }
+
+
+  GLPS_thornton<-terra::rast("./Data/GLPS/glps_gleam_61113_10km.tif")
+  GLPS_thornton<-classify(GLPS_thornton,matrix(c(1:15,c(0,0,1,2,3,3,4,5,3,3,4,5,6,7,NA)),ncol = 2))
+  
+  GLPS_vals<-data.frame(Code=0:7,
+                        Short=c("LGA", "LGH", "LGT", "MXA", "MXH", "MXT", "Urban", "Other"),
+                        LPS=c("Rangelands Arid","Rangelands Humid","Rangelands Temperate","Mixed Arid","Mixed Humid","Mixed Temperate","Urban","Other"))
+
+  levels(GLPS_thornton)<-GLPS_vals[,c("Code","LPS")]
+  
+  GLPS_thornton<-terra::mask(terra::crop(GLPS_thornton,Regions),Regions)
+
   Regions$Code<-1:length(Regions)*100
-  REG<-terra::rasterize(Regions,GLPS(),field="Code")
-  HAZ<-GLPS()+REG
+  REG<-terra::rasterize(Regions,GLPS_thornton,field="Code")
+  HAZ<-GLPS_thornton+REG
   names(HAZ)<-"GLPS"
   
-  Area<-cellSize(GLPS(),unit="ha")
-
-  GLPS_vals<-data.frame(Code=0:11,LPS=GLPS_Legend[1:12,System_Full])
+  # Get area of glps per admin
+  GLPS_area<-cellSize(GLPS_thornton,unit="ha")
   
-  X<-data.table(zonal(Area,HAZ,fun=sum,na.rm=T))
+  X<-data.table(zonal(GLPS_area,HAZ,fun=sum,na.rm=T))
   X[,admin:=floor(GLPS/100)*100]
   X[,GLPS:=GLPS-admin]
   X[,admin:=terra::values(Regions)[match(X$admin,Regions$Code),"admin_name"]]
+  X[,GLPS_short:=GLPS_vals[match(X$GLPS,GLPS_vals$Code),"Short"]]
   X[,GLPS:=GLPS_vals[match(X$GLPS,GLPS_vals$Code),"LPS"]]
   
   admin_sizes<-data.table(admin=Regions$admin_name,admin_unit_ha=round(expanse(Regions,unit="ha"),2))
   X<-merge(X,admin_sizes)
   X[,perc:=round(100*area/admin_unit_ha,2)][,area:=round(area,2)]
-  X
+  
+  GLPS_table<-X
+  
+  # get cattle production per admin per GLPS
+  cattle<-Exposure()[["cattle-production-k"]]
+  
+  X<-data.table(zonal(cattle,HAZ,fun=sum,na.rm=T))
+  X[,admin:=floor(GLPS/100)*100]
+  X[,GLPS:=GLPS-admin]
+  X[,admin:=terra::values(Regions)[match(X$admin,Regions$Code),"admin_name"]]
+  X[,GLPS_short:=GLPS_vals[match(X$GLPS,GLPS_vals$Code),"Short"]]
+  X[,GLPS:=GLPS_vals[match(X$GLPS,GLPS_vals$Code),"LPS"]]
+  names(X)[2]<-"cattle_prod"
+  
+  # get cattle production per GLPS total
+  gpls_cattle<-data.table(zonal(cattle,GLPS_thornton,fun=sum,na.rm=T))
+  colnames(gpls_cattle)<-c("GLPS","cattle_prod_tot")
+  X<-merge(X,gpls_cattle,all.x=T,by="GLPS")
+  X[,cattle_glps_prop:=round(cattle_prod/cattle_prod_tot,3)]
+  
+  cattle_admin_lps<-X
+  
+  # Merge area and cattle production results
+  GLPS_table<-merge(GLPS_table,cattle_admin_lps[,list(admin,GLPS_short,cattle_glps_prop)],all.x=T,by=c("admin","GLPS_short"))
+  
+  # read in thornton et al. 2022 data
+  dmi_econ_loss<-fread("./Data/thornton_lancet/dmi_and_econ_loss.csv")
+  dmi_econ_loss<-dmi_econ_loss[ISO == country_zips[Country==input$country_choice,iso3c[1]]
+                               ][,ISO:=NULL
+                                 ][,Region:=NULL
+                                   ][,`WTD-AV`:=NULL]
+  dmi_econ_loss<-melt(dmi_econ_loss,id.vars = c("Country","Variable","Scenario"),variable.name = "GLPS_short")
+  dmi_econ_loss[,value:=gsub(",","",value)][,value:=as.numeric(value)]
+  dmi_econ_loss<-dcast(dmi_econ_loss,Country+Scenario+GLPS_short~Variable)
+  dmi_econ_loss[,GLPS_short:=gsub(c("URB","OTHER"),c("Urban","Other"),GLPS_short)]
+  
+  # merge dmi data with GPLS system data
+  GLPS_table<-merge(GLPS_table,by="GLPS_short",dmi_econ_loss[Scenario=="historical",list(GLPS_short,dmi)],all.x=T)
+  setnames(GLPS_table,"dmi","dmi_hist")
+  GLPS_table<-merge(GLPS_table,by="GLPS_short",dmi_econ_loss[Scenario=="2045_SSP585",list(GLPS_short,dmi)],all.x=T)
+  setnames(GLPS_table,"dmi","dmi_2045_SSP585")
+  GLPS_table[,dmi_diff:=dmi_2045_SSP585-dmi_hist
+             ][,dmi_diff_perc:=round(100*dmi_2045_SSP585/dmi_hist,2)][,dmi_diff_perc:=dmi_diff_perc-100]
+  
+  # merge econ loss data with GPLS system data
+  GLPS_table<-merge(GLPS_table,by="GLPS_short",dmi_econ_loss[Scenario=="2045_SSP585",list(GLPS_short,meat_loss,milk_loss)],all.x=T)
+  setnames(GLPS_table,c("meat_loss","milk_loss"),c("meat_loss_2045_SSP585","milk_loss_2045_SSP585"))
+  GLPS_table[,meat_loss_2045_SSP585:=cattle_glps_prop*as.numeric(meat_loss_2045_SSP585)
+             ][,milk_loss_2045_SSP585:=cattle_glps_prop*as.numeric(meat_loss_2045_SSP585)]
+  
+# Convert 2005 IUSD to nearest year (2021)
+  # Download worldbank CPI and exchange rate data
+cpi_file<-paste0(SaveDir(),"/CPI.csv")
+if(!file.exists(cpi_file)){
+  cpi_data <- data.table(wbstats::wb_data("FP.CPI.TOTL", country_zips[Country==input$country_choice,iso3c][1]))
+  fwrite(cpi_data,file=cpi_file)
+  }else{
+    cpi_data<-fread(cpi_file)
+    }
+
+xrat_file<-paste0(SaveDir(),"/Xrat.csv")
+if(!file.exists(xrat_file)){
+  exchange_rates <- data.table(wbstats::wb_data("PA.NUS.FCRF",country_zips[Country==input$country_choice,iso3c][1]))
+  fwrite(exchange_rates,file=xrat_file)
+  }else{
+    exchange_rates<-fread(xrat_file)
+    }
+
+adj_usd<-function(value,xrat_past,xrat_fut,index_past,index_fut){
+  X<-value*xrat_past
+  X<-X/index_past
+  X<-X*index_fut
+  X<-X/xrat_fut
+  return(X)
+}
+
+GLPS_table[,meat_loss_2045_SSP585_adj:=adj_usd(value=meat_loss_2045_SSP585,
+                                               xrat_past=exchange_rates[date==2005,PA.NUS.FCRF][1],
+                                               xrat_fut=exchange_rates[date==2021,PA.NUS.FCRF][1],
+                                               index_past=cpi_data[date==2005,FP.CPI.TOTL][1],
+                                               index_fut=cpi_data[date==2021,FP.CPI.TOTL][1])]
+
+GLPS_table[,milk_loss_2045_SSP585_adj:=adj_usd(value=milk_loss_2045_SSP585,
+                                     xrat_past=exchange_rates[date==2005,PA.NUS.FCRF][1],
+                                     xrat_fut=exchange_rates[date==2021,PA.NUS.FCRF][1],
+                                     index_past=cpi_data[date==2005,FP.CPI.TOTL][1],
+                                     index_fut=cpi_data[date==2021,FP.CPI.TOTL][1])]
+  
+  GLPS_table
 })
+
+# Subset GLPS table by admin units selected
+GLPS_table<-reactive({GLPS_table1()[admin %in% SubGeog()$admin_name]})
 ```
 
+###### Table
+```{r Plot - GLPS Table,echo=F}
+renderDT({
+  datatable(dplyr::mutate_if(dplyr::mutate_if(GLPS_table(),is.numeric,~round(.,3)),is.character,~as.factor(.)),
+            caption="",
+            extensions = 'Buttons',
+            filter = "top",
+            options = list(dom = 'Blfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
+                           lengthMenu = list(c(10,25,50,-1),c(10,25,50,"All"))))
+  
+})
+  
+```
+
+###### Barplot
 ```{r Plot - GLPS Barplot,echo=F}
 GLPS_barplot<-reactive({
   g<-ggplot(data=GLPS_table(), aes(x = admin, y = area,fill=GLPS)) + 
@@ -1792,20 +1933,6 @@ GLPS_barplot<-reactive({
 })
 
 renderPlot({GLPS_barplot()},height=Plot.Height, width=Plot.Width)
-```
-
-```{r Plot - GLPS Table,echo=F}
-renderDT({
-  datatable(GLPS_table(),
-            caption="",
-            extensions = 'Buttons',
-            filter = "top",
-            options = list(dom = 'Blfrtip',
-                           buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
-                           lengthMenu = list(c(10,25,50,-1),c(10,25,50,"All"))))
-  
-})
-  
 ```
 
 #### Trends{.tabset .tabset-fade .tabset-pills}
@@ -1965,9 +2092,9 @@ renderUI({
 :::{}
 ```{r Trends - Select future scenario,echo=F}
 selectInput(inputId="trend_scenario", 
-            label="Choose future scenario",
-            choices =  paste0(Scenarios$Scenario[-1],"-",Scenarios$Time),
-            selected =  paste0(Scenarios$Scenario[-1],"-",Scenarios$Time),
+            label="Choose scenario",
+            choices =  Scenarios$combined,
+            selected =  "historic",
             multiple = F, 
             width="250px")
 ```
@@ -2026,7 +2153,7 @@ if(F){
 ```
 
 **Historical trend in selected variables**  
-
+*Note this plot will only show the historical trend*
 ```{r Trends - Plot Lines - Historical,echo=F,eval=T}
 renderPlot({terra::plot(g_hist())},height=Plot.Height, width=Plot.Width)
 ```
@@ -2878,6 +3005,10 @@ renderDT({
 17) Admin0  
 18) Anomaly approach  
 19) Different baselines
+20) Download this map option
+21) Reference data should come from a meta-data files?
+22) Hazard summary section - display hazards x severity maps for country in hazard or results section
+23) Show hazard thresholds at top of results section or in maps
 
 **Bugs & Urgent Description Needs**
 1) historic vs future plots should use the same legend scale  
@@ -2890,3 +3021,4 @@ renderDT({
 8) Is changing recurrance threshold doing anything? it appears not
 9) Cropland exposure tab needs units
 10) Update descriptions of THI and HSH
+11) Choose future scenario is not working in the trends section, also historic select is incorrect
