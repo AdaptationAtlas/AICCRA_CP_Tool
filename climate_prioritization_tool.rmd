@@ -28,7 +28,9 @@ if(!require("pacman", character.only = TRUE)){install.packages("pacman",dependen
 required.packages <- c("countrycode",
                        "data.table",
                        "devtools",
+                       "dplyr",
                        "DT",
+                       "forcats",
                        "ggplot2",
                        "MetBrewer",
                        "mgsub",
@@ -47,15 +49,16 @@ pacman::p_load(char=required.packages,install = T,character.only = T)
 
 ```{r Find country data in zip files,echo=F}
 country_zips<-data.table(filepath=list.files("./Data/country_data_zips",".zip",full.names = T))
-country_zips[,iso3c:=gsub(".zip|[.]/Data/country_data_zips/|-annual|-seasonal","",filepath)
-             ][,timeframe:=gsub(".zip","",unlist(tail(tstrsplit(unlist(tail(tstrsplit(filepath,"/"),1)),"-"),1)))]
+country_zips[,iso3c:=unlist(tstrsplit(tail(tstrsplit(filepath,"/"),1),"-",keep=1)),by=filepath
+             ][,timeframe:=gsub(".zip","",unlist(tstrsplit(tail(tstrsplit(filepath,"/"),1),"-",keep=2)),"-"),by=filepath
+               ][timeframe=="seasonal",timeframe:="seasonal_jagermeyer_cc"]
 country_zips[,folder:=gsub(".zip","",unlist(tail(tstrsplit(filepath,"/"),1)))]
 country_zips[,Country:=countrycode::countrycode(iso3c, origin = 'iso3c', destination = 'country.name')]
 
 ```
 
 ```{r Hazards - load meta data and class breaks,echo=F}
-hazards<-sort(c("NDD","NTx40","HSM_NTx35","HSH_max","HSH_mean","THI_max","THI_mean","NDWS","TAI","NDWL0","PTOT","TAVG"))
+hazards<-sort(c("NDD","NTx40","NTx35","HSH_max","HSH_mean","THI_max","THI_mean","NDWS","TAI","NDWL0","PTOT","TAVG"))
 haz_meta<-data.table::fread("./Data/metadata/haz_metadata.csv")
 haz_class<-fread("./Data/metadata/haz_classes.csv")
 haz_class[is.na(lower_lim),lower_lim:=-Inf]
@@ -114,6 +117,8 @@ numericInput(inputId="PropThreshold",
 ```
 :::
 ::::
+
+Hazards can be calculated annually or seasonally: `annual` = for a year beginning with the planting date of the main season (using Jagermeyer crop calendar), `seasonal_sos_primary` = main growing season calculated using onset of rainfall, `seasonal_sos_secondary` = subordinate growing season calculated using onset of rainfall, `seasonal_jagermeyer_cc` = main growing season calculated using Jagermeyer crop calendar.  
 
 The `Reccurence threshold` is used when classifying hazards based on the proportions of seasons a hazard is present in a time series of data. If set to 0.5 then a hazard is considered present if it is present in more than 50% of seasons. 
 *Note if season is selected then all hazards are calculated for the maize growing season.*  
@@ -195,7 +200,7 @@ return(PAL)
 ```{r Plot - Text Size, echo=F}
 numericInput(inputId="TextSize",
              label="Text Size",
-             value=1,
+             value=1.5,
              min=1,
              max=5,
              step=0.1,
@@ -269,7 +274,7 @@ numericInput(inputId="Plot.Width",
 :::
 ::::
 
-```{r Plot - Create bar hei<ght and width functions, echo=F}
+```{r Plot - Create bar height and width functions, echo=F}
   Plot.Height <- function(){input$PlotBaseWidth*input$Plot.Height}
   Plot.Width <- function(){input$PlotBaseWidth*input$Plot.Width}
 ```
@@ -310,7 +315,9 @@ https://eia.scio.services:18002/hub/user-redirect/lab/tree/common_data/atlas_haz
 `by_season` = hazard are calculated for the maize growing season according to the Jagermier crop calendar (example `KEN-seasonal.zip`)
 </font> 
 
-### Admin and Exposure Datasets
+### Datasets {.tabset .tabset-fade .tabset-pills}
+
+#### Admin
 ```{r Dataset - load regions,echo=F}
 # Make a list of different administrative unit vectors
 Geographies<-reactive({
@@ -353,6 +360,7 @@ renderPlot({terra::plot(Geographies()[[3]])})
 :::
 :::
 
+#### Exposure
 ```{r Dataset - load exposure,echo=F}
 Exposure<-reactive({
   terra::rast(paste0(country_dir(),"/Exposure.tif"))
@@ -432,15 +440,12 @@ SPAM_GLW<-reactive({
 ```
 
 ```{r Analysis - Process MapSPAM,eval=T,echo=F}
-# This chunk creates tables that rank crops according to their MapSPAM area within regions. It is not currently used in this script but is useful when select which crops to display in waffle plots
 
-reactive({
+exposure_by_admin<-reactive({
+  
   if(!dir.exists(paste0(country_dir(),"/exposure_by_admin"))){
     dir.create(paste0(country_dir(),"/exposure_by_admin"))
   }
-})
-
-exposure_by_admin<-reactive({
   
   ms_file<-paste0(country_dir(),"/exposure_by_admin/exposure_by_admin.csv")
 
@@ -472,7 +477,7 @@ exposure_by_admin<-reactive({
 ```{r Plot - Exposure by geography,echo=F}
 renderDT({
   datatable(exposure_by_admin(),
-            caption="Trends table",
+            caption="Exposure by geography",
             extensions = 'Buttons',
             filter = "top",
             options = list(dom = 'Blfrtip',
@@ -507,6 +512,38 @@ if(F){
 }
 ```
 
+
+#### Crop Calendar
+This section is in development, you may see an error message.
+```{r Dataset - Crop Calendar,echo=F}
+crop_cal<-reactive({
+  if(grepl("seasonal",input$timeframe_choice)){
+    crop_cal<-terra::rast(paste0(country_dir(),"/crop_cal.tif"))
+    crop_cal<-terra::mask(terra::crop(crop_cal,Geographies()$admin0),Geographies()$admin0)
+    crop_cal
+  }
+})
+
+renderPlot({terra::plot(crop_cal())},height=Plot.Height, width=Plot.Width)
+
+
+cc_hist<-reactive({
+
+ data<-rbind(data.table(terra::values(crop_cal()$S1),season="S1"),
+             data.table(month=terra::values(crop_cal()$S2),season="S2"),use.names=F)
+ 
+ colnames(data)<-c("start_month","season")
+ 
+ data<-data[!is.na(start_month),list(N=.N),by=list(start_month,season)]
+ g<-ggplot(data, aes(x = start_month, y=N,fill = season)) +  
+   geom_bar(stat = "identity") +
+   ggplot_theme()
+ g
+})
+
+renderPlot({terra::plot(cc_hist())},height=Plot.Height, width=Plot.Width)
+```
+
 ### Create Hazards
 
 **Define hazard thresholds**  
@@ -514,10 +551,10 @@ See https://github.com/AdaptationAtlas/hazards for how hazards layers were creat
 
 **HSH_max** = `r haz_meta[grepl("HSH_max",file.filename),dataset.desc]`   
 **HSH_mean** = `r haz_meta[grepl("HSH_mean",file.filename),dataset.desc]`   
-**HSM_NTx35** = `r haz_meta[grepl("HSM_NTx35",file.filename),dataset.desc]`  
 **NDD** = `r haz_meta[grepl("NDD",file.filename),dataset.desc]`  
 **NDWL0** = `r haz_meta[grepl("NDWL0",file.filename),dataset.desc]`  
 **NDWS** = `r haz_meta[grepl("NDWS",file.filename),dataset.desc]`  
+**NTx35** = `r haz_meta[grepl("NTx35",file.filename),dataset.desc]`  
 **NTx40** = `r haz_meta[grepl("NTx40",file.filename),dataset.desc]`  
 **PTOT** = `r haz_meta[grepl("PTOT",file.filename),dataset.desc]`  
 **TAI** = `r haz_meta[grepl("TAI",file.filename),dataset.desc]`  
@@ -1198,16 +1235,16 @@ ClassifyHazards<-function(Data){
     return(X)
 }
 
-HazardWrapper<-function(Thresholds,FileName,SaveDir,PropThreshold,PropTDir,hazard_dir,Scenarios){
+HazardWrapper<-function(Thresholds,FileName,SaveDir,PropThreshold,PropTDir,hazard_dir,Scenarios,verbose=F){
   Files<-list.files(hazard_dir,".tif",full.names = T)
-  Files<-Files[grepl("historical|ENSEMBLE",Files)]
+  Files<-Files[grepl("historical|ENSEMBLE",Files) & !grepl("tif.aux.xml",Files)]
   
   Hazards<-lapply(1:nrow(Scenarios),FUN=function(j){
     for(i in 1:nrow(Thresholds)){
-      if(F){
+      if(verbose){
       # Display progress
       cat('\r                                                                                                                     ')
-      cat('\r',paste0(i," | ",j))
+      cat('\r',paste0("Scenario ", j," | Hazard ",i))
       flush.console()
       }
       
@@ -1624,6 +1661,14 @@ exposure_by_adminX<-reactive({
       setnames(X,"admin1","admin")
       X<-X[admin %in% input$Admin1]
     }
+  
+  # Add admin area
+  admin_area<-data.table(admin=SubGeog()$admin_name,admin_area_ha=terra::expanse(SubGeog(),unit="ha"))
+  X<-merge(X,admin_area,all.x=T)
+  X<-relocate(X,admin_area_ha,.after=admin)
+  
+  # Add total
+  X[,value_total:=value[product=="total"],by=list(admin,variable)][,value_perc:=round(100*value/value_total,3)]
   X
 })
 ```
@@ -1686,7 +1731,6 @@ HazXRegion<-reactive({
 
 #### Exposure Summary{.tabset .tabset-fade .tabset-pills}
 
-
 :::: {style="display: flex;"}
 :::{}
 ```{r Plot - Choose Exposure variable,echo=F}
@@ -1702,9 +1746,35 @@ renderUI({
 exposure_unit<-reactive({exposure_layers_subset()[variable==input$exposure_variable,unique(unit)]})
 
 Vals<-reactive({
-  exposure_by_adminX()[variable %in% input$exposure_variable & product %in% input$product_choice,sort(unique(product))]
+  exposure_by_adminX()[product %in% input$product_choice,sort(unique(product))]
 })
 
+```
+:::
+:::{}
+```{r Plot - Products to include 1,echo =F}
+  selectInput(inputId="product_choice1a", 
+              label="Select products",
+              choices = c("All","Livestock","Crops","None"),
+              selected = "All",
+              multiple = F, 
+              width="140px")
+```
+:::
+:::{}
+```{r Plot - Products to include 2,echo =F}
+product_choices_a<-reactive({
+  if(input$product_choice1a=="All"){X<-Vals()}
+  if(input$product_choice1a=="Livestock"){X<-Vals()[Vals() %in% exposure_layers()[category=="livestock",sort(unique(product))]]}
+  if(input$product_choice1a=="Crops"){
+    X<-Vals()[Vals() %in% exposure_layers()[category=="crop",sort(unique(product))]]
+    X<-X[!X %in% c("total","roots","temperate fruit","fruit","vegetables","banana and plantain","pulses","cereals",
+                   "coffee","oil crops")]
+    X
+    }
+  if(input$product_choice1a=="None"){X<-NULL}
+  X
+})
 ```
 :::
 :::{}
@@ -1713,14 +1783,32 @@ renderUI({
   checkboxGroupInput(inputId="exposure_crops", 
               label="Crops to include in plot",
               choices = Vals(),
-              selected = Vals()[1:8],
+              selected = product_choices_a(),
               inline=T)
 })
 
-Exposure_table<-reactive({
-  exposure_by_adminX()[variable %in% input$exposure_variable & product %in% input$exposure_crops]
-  })
 
+
+# Sum values in the exposure_table
+Exposure_table_sum<-reactive({
+  exposure_by_adminX()[,list(value=sum(value,na.rm=T)),by=list(variable,unit,product)
+                       ][,value_total:=value[product=="total"],by=list(variable)
+                            ][,value_perc:=round(100*value/value_total,3)]
+})
+
+#Subset by selected variables and products for plotting
+Exposure_barplot_data<-reactive({
+  exposure_by_adminX()[variable %in% input$exposure_variable & product %in% input$exposure_crops
+                       ][,layer_name:=NULL]
+})
+
+Exposure_barplot_sum_data<-reactive({
+  X<-Exposure_table_sum()[variable %in% input$exposure_variable & product %in% input$exposure_crops]
+  X[,product:=forcats::fct_reorder(product, value)]
+  X
+})
+
+# Subset exposure rasters by selected variables and products
 Exposure_plot<-reactive({
   SPAM_GLW_SubGeog()[[names(SPAM_GLW_SubGeog()) %in% paste0(input$exposure_crops,"-",input$exposure_variable,"-",exposure_unit())]]
 })
@@ -1739,24 +1827,57 @@ terra::plot(Exposure_plot(),
 },height=Plot.Height, width=Plot.Width)
 
 ```
+
 ##### Barplot
-```{r Plot - Exposure BarPlot,echo=F}
-Exposure_barplot<-reactive({
-  g<-ggplot(data=Exposure_table(), aes(x = admin, y = value,fill=product)) + 
+**Values summed across all selected admin areas**
+```{r Plot - Exposure BarPlot Sum,echo=F}
+Exposure_sum_barplot<-reactive({
+  g<-ggplot(data=Exposure_barplot_sum_data(), aes(x = product, y = value,fill=product)) + 
   geom_bar(stat = "identity",position = position_dodge(width = 0.9))+
   ggplot_theme()+
+  labs(y=input$exposure_variable,x="product")+
+  coord_flip()+
+  theme(legend.position = "none")
+  g
+})
+
+renderPlot({Exposure_sum_barplot()},height=Plot.Height, width=Plot.Width)
+
+```
+
+**Values per selected admin areas**  
+*This plot is for looking at a few admin areas x crops at a time**
+```{r Plot - Exposure BarPlot,echo=F}
+Exposure_barplot<-reactive({
+  g<-ggplot(data=Exposure_barplot_data(), aes(x = admin, y = value,fill=product)) + 
+  geom_bar(stat = "identity",position = position_dodge(width = 0.9))+
+  ggplot_theme()+
+  labs(y=input$exposure_variable)+
   coord_flip()
   g
 })
 
 renderPlot({Exposure_barplot()},height=Plot.Height, width=Plot.Width)
-
 ```
 ##### Table
-The table below sums crop and livestock exposure variables for the selected administrative areas, exposure variables and products/
+The table below shows total crop and livestock exposure variables per product per selected administrative areas.
 ```{r Plot - ExposureTable,echo=F}
   renderDT({
-    datatable(Exposure_table(),
+    datatable(dplyr::mutate_if(dplyr::mutate_if(exposure_by_adminX()[product %in% input$exposure_crops],is.numeric,~round(.,3)),is.character,~as.factor(.)),
+              caption="",
+              extensions = 'Buttons',
+              filter = "top",
+              options = list(dom = 'Blfrtip',
+                             buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
+                             lengthMenu = list(c(10,25,50,-1),c(10,25,50,"All"))))
+    
+  })
+```
+
+The table below sums crop and livestock exposure variables per product across all selected administrative areas.
+```{r Plot - ExposureTable summed,echo=F}
+  renderDT({
+    datatable(dplyr::mutate_if(dplyr::mutate_if(Exposure_table_sum()[product %in% input$exposure_crops],is.numeric,~round(.,3)),is.character,~as.factor(.)),
               caption="",
               extensions = 'Buttons',
               filter = "top",

@@ -20,12 +20,14 @@ PalFun<-function(PalName,N,Names) {
 }
 
 
-country_zips<-data.table(filepath=list.files("Data/country_data_zips",".zip",full.names = T))
-country_zips[,iso3c:=gsub(".zip|Data/country_data_zips/|-annual|-seasonal","",filepath)][,timeframe:=gsub(".zip","",unlist(tail(tstrsplit(unlist(tail(tstrsplit(filepath,"/"),1)),"-"),1)))]
+country_zips<-data.table(filepath=list.files("./Data/country_data_zips",".zip",full.names = T))
+country_zips[,iso3c:=unlist(tstrsplit(tail(tstrsplit(filepath,"/"),1),"-",keep=1)),by=filepath
+][,timeframe:=gsub(".zip","",unlist(tstrsplit(tail(tstrsplit(filepath,"/"),1),"-",keep=2)),"-"),by=filepath
+][timeframe=="seasonal",timeframe:="seasonal_jagermeyer_cc"]
 country_zips[,folder:=gsub(".zip","",unlist(tail(tstrsplit(filepath,"/"),1)))]
 country_zips[,Country:=countrycode::countrycode(iso3c, origin = 'iso3c', destination = 'country.name')]
 
-hazards<-c("NDD","NTx40","HSM_NTx35","HSH_max","HSH_mean","THI_max","THI_mean","NDWS","TAI","NDWL0","PTOT")
+hazards<-c("NDD","NTx40","NTx35","HSH_max","HSH_mean","THI_max","THI_mean","NDWS","TAI","NDWL0","PTOT")
 haz_meta<-data.table::fread("./Data/metadata/haz_metadata.csv")
 haz_class<-fread("./Data/metadata/haz_classes.csv")
 haz_classes<-unique(haz_class$description)
@@ -36,8 +38,8 @@ Scenarios<-rbind(data.table(Scenario="historic",Time="historic"),data.table(expa
 
 scenarios_x_hazards<-data.table(Scenarios,Hazard=rep(hazards,each=nrow(Scenarios)))[,Scenario:=as.character(Scenario)][,Time:=as.character(Time)]
 
-country_choice<-"Tanzania"
-timeframe_choice<-"seasonal"
+country_choice<-"Angola"
+timeframe_choice<-"seasonal_sos_secondary"
 
 country_dir<-paste0("./Data/", country_zips[Country==country_choice & timeframe==timeframe_choice,folder])
 
@@ -66,9 +68,6 @@ if(!dir.exists(SaveDir)){
 Exposure<-terra::rast(paste0(country_dir,"/Exposure.tif"))
 
 
-
-
-
 Cropland<-Exposure$`cropland-area-ha`
 names(Cropland)<-"Cropland_Area"
 
@@ -95,6 +94,7 @@ GLPS<-terra::rast("./Data/GLPS/glps_gleam_61113_10km.tif")
 levels(GLPS)<-data.frame(value=0:14,LPS=GLPS_Legend[1:15,System_Full])
 GLPS<-terra::mask(terra::crop(terra::resample(GLPS,Exposure,method="near"),Geographies$admin0),Geographies$admin0)
 
+SubGeog<-Geographies$admin1
 
   Regions<-SubGeog
   Regions$Code<-1:length(Regions)*100
@@ -271,7 +271,8 @@ Hazards<-HazardWrapper(Thresholds=Thresholds,
                        PropThreshold=PropThreshold,
                        PropTDir=">",
                        hazard_dir= country_dir,
-                       Scenarios=Scenarios)
+                       Scenarios=Scenarios,
+                       verbose=T)
 
 
 PlotHazards<-terra::mask(terra::crop(Hazards[["historic-historic"]],SubGeog),SubGeog)

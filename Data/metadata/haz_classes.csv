@@ -7,10 +7,10 @@ HSH_mean,#NAME?,27,1,No significant stress,>
 HSH_mean,27,32,2,Moderate,>
 HSH_mean,32,41,3,Severe,>
 HSH_mean,41,Inf,4,Extreme,>
-HSM_NTx35,#NAME?,7,1,No significant stress,>
-HSM_NTx35,7,14,2,Moderate,>
-HSM_NTx35,14,21,3,Severe,>
-HSM_NTx35,21,Inf,4,Extreme,>
+NTx35,#NAME?,7,1,No significant stress,>
+NTx35,7,14,2,Moderate,>
+NTx35,14,21,3,Severe,>
+NTx35,21,Inf,4,Extreme,>
 NDD,#NAME?,15,1,No significant stress,>
 NDD,15,20,2,Moderate,>
 NDD,20,25,3,Severe,>
